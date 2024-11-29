@@ -16,9 +16,9 @@ class RequestTracker:
             print("Max retries reached")
             return False
         elapsed_time = time.time() - self.start_time
-        if elapsed_time > self.max_time:
-            print("Max time reached")
-            return False
+        # if elapsed_time > self.max_time:
+        #     print("Max time reached")
+        #     return False
         return True
 
     def log_retry(self):

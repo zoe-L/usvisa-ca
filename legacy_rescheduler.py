@@ -10,12 +10,13 @@ from settings import TEST_MODE
 # This is frankly very, very bad and should be rewritten with requests
 # when I get a test account
 def legacy_reschedule(driver):
-    driver.refresh()
-    date_selection_box = WebDriverWait(driver, 5).until(
+    # driver.refresh()
+    # sleep(0.1)
+    date_selection_box = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located(
             (
                 By.XPATH,
-                "/html/body/div[4]/main/div[4]/div/div/form/fieldset/ol/fieldset/div/div[2]/div[3]/label[1]",
+                "/html/body/div[4]/main/div[4]/div/div/form/fieldset/ol/fieldset/div/div[2]/div[3]/li[1]/input",
             )
         )
     )
@@ -68,6 +69,7 @@ def legacy_reschedule(driver):
     appointment_time_options[len(appointment_time_options) - 1].click()
 
     # Click "Reschedule"
+    # sleep(0.1)
     driver.find_element(
         By.XPATH,
         "/html/body/div[4]/main/div[4]/div/div/form/div[2]/fieldset/ol/li/input",
@@ -78,5 +80,6 @@ def legacy_reschedule(driver):
         )
     finally:
         driver.implicitly_wait(0.1)
+        # This currently makes no diff since there's no confirm button for scheduling
         if not TEST_MODE:
             confirm.click()

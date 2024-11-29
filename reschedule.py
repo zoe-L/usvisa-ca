@@ -1,7 +1,10 @@
+import math
 import re
 import traceback
 from datetime import datetime
+from logging import exception, ERROR
 from time import sleep
+import pause
 
 import requests
 from selenium import webdriver
@@ -69,9 +72,10 @@ def get_appointment_page(driver: WebDriver) -> None:
 
 def get_available_dates(
     driver: WebDriver, request_tracker: RequestTracker
-) -> list | None:
-    request_tracker.log_retry()
-    request_tracker.retry()
+) :
+    # temporarily disable max retry
+    # request_tracker.log_retry()
+    # request_tracker.retry()
     current_url = driver.current_url
     request_url = current_url + AVAILABLE_DATE_REQUEST_SUFFIX
     request_header_cookie = "".join(
@@ -83,36 +87,41 @@ def get_available_dates(
     try:
         response = requests.get(request_url, headers=request_headers)
     except Exception as e:
-        print("Get available dates request failed: ", e)
-        return None
-    if response.status_code != 200:
-        print(f"Failed with status code {response.status_code}")
-        return None
+        raise Exception(f"Get available dates request failed with status code {response.status_code}:", e)
     try:
         dates_json = response.json()
-    except:
-        print("Failed to decode json")
-        return None
-    dates = [datetime.strptime(item["date"], "%Y-%m-%d").date() for item in dates_json]
-    return dates
+    except Exception as e:
+        raise Exception("Failed to decode json", e)
+    # dates = [datetime.strptime(item["date"], "%Y-%m-%d").date() for item in dates_json]
+    return dates_json[:1]
 
 
 def reschedule(driver: WebDriver) -> bool:
     date_request_tracker = RequestTracker(DATE_REQUEST_MAX_RETRY, DATE_REQUEST_MAX_TIME)
     while date_request_tracker.should_retry():
+        now = datetime.now()
+        if now.minute in (29, 59, 30, 31, 0, 1):
+            sleep(30 - datetime.now().second % 30)
+        else:
+            next_multiple_of_five = ( math.floor(now.minute / 5.0) + 1 ) * 5
+            if next_multiple_of_five == 60:
+                if now.hour + 1 == 24:
+                    pause.until(datetime(now.year, now.month, now.day + 1, 0))
+                else:
+                    pause.until(datetime(now.year, now.month, now.day, now.hour + 1))
+            else: # will sleep over the first clause
+                pause.until(datetime(now.year, now.month, now.day, now.hour, next_multiple_of_five))
         dates = get_available_dates(driver, date_request_tracker)
-        if not dates:
-            print("Error occured when requesting available dates")
-            sleep(DATE_REQUEST_DELAY)
-            continue
-        earliest_available_date = dates[0]
+        if not dates or len(dates) == 0:
+            raise Exception("Error occured when requesting available dates")
+        earliest_available_date = datetime.strptime(dates[0]["date"], "%Y-%m-%d").date()
         latest_acceptable_date = datetime.strptime(
             LATEST_ACCEPTABLE_DATE, "%Y-%m-%d"
         ).date()
         if earliest_available_date <= latest_acceptable_date:
-            print(
-                f"{datetime.now().strftime('%H:%M:%S')} FOUND SLOT ON {earliest_available_date}!!!"
-            )
+            # print(
+            #     f"{datetime.now().strftime('%H:%M:%S')} FOUND SLOT ON {earliest_available_date}!!!"
+            # )
             try:
                 legacy_reschedule(driver)
                 print("SUCCESSFULLY RESCHEDULED!!!")
@@ -125,7 +134,6 @@ def reschedule(driver: WebDriver) -> bool:
             print(
                 f"{datetime.now().strftime('%H:%M:%S')} Earliest available date is {earliest_available_date}"
             )
-        sleep(DATE_REQUEST_DELAY)
     return False
 
 
@@ -140,7 +148,7 @@ def reschedule_with_new_session() -> bool:
         except Exception as e:
             print("Unable to get appointment page: ", e)
             session_failures += 1
-            sleep(FAIL_RETRY_DELAY)
+            # sleep(FAIL_RETRY_DELAY)
             continue
     rescheduled = reschedule(driver)
     if rescheduled:
@@ -153,9 +161,13 @@ def reschedule_with_new_session() -> bool:
 if __name__ == "__main__":
     session_count = 0
     while True:
+        start_time = datetime.now()
         session_count += 1
         print(f"Attempting with new session #{session_count}")
-        rescheduled = reschedule_with_new_session()
-        sleep(NEW_SESSION_DELAY)
-        if rescheduled:
-            break
+        try:
+            rescheduled = reschedule_with_new_session()
+            if rescheduled:
+                break
+        except:
+            pass
+        # sleep(NEW_SESSION_DELAY - (datetime.now() - start_time).total_seconds() % 60)
